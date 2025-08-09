@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Charlie lär sig spanska</title>
+
+  <!-- iOS "app på hemskärmen" meta -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Crect width='256' height='256' rx='50' fill='%23ffd54a'/%3E%3Ctext x='128' y='160' text-anchor='middle' font-size='120' font-family='sans-serif'%3E%F0%9F%87%AA%F0%9F%87%B8%3C/text%3E%3C/svg%3E" />
+
+  <style>
+    :root{
+      --bg:#0c0f14; --surface:#121622; --card:#151a2a; --ink:#e9edf7;
+      --muted:#9fb1ff; --accent:#ffd54a; --ok:#20c06b; --bad:#ff4a4a; --stroke:#263045;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial}
+    header{
+      display:flex;align-items:center;justify-content:space-between;
+      padding:14px 18px;border-bottom:1px solid var(--stroke);
+      background:linear-gradient(180deg,#0f1320 0%,#0b0e17 100%); position:sticky;top:0;z-index:10;
+    }
+    header .title{display:flex;align-items:center;gap:10px}
+    header h1{font-size:16px;margin:0;font-weight:700}
+    header .stats{display:flex;gap:10px;align-items:center}
+    .pill{background:var(--card);border:1px solid var(--stroke);border-radius:999px;padding:6px 10px;font-size:13px;opacity:.9}
+    main{max-width:1100px;margin:0 auto;padding:12px}
+    .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center;
+      padding:10px;background:var(--surface);border:1px solid var(--stroke);border-radius:14px;margin:12px auto}
+    select,button{background:var(--card);color:var(--ink);border:1px solid var(--stroke);
+      border-radius:12px;padding:10px 14px;font-size:14px;cursor:pointer}
+    button.primary{background:var(--accent);color:#000;border:none}
+    .badges{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-top:6px}
+    .badge{display:inline-flex;align-items:center;gap:6px;background:#1a2134;border:1px solid var(--stroke);
+      border-radius:18px;padding:4px 10px;font-size:12px}
+    .stage-wrap{display:grid;grid-template-columns:1fr;gap:12px}
+    canvas{display:block;margin:0 auto;border:1px solid var(--stroke);border-radius:16px;background:#0b0f1a;touch-action:manipulation}
+    #ghostInput{position:fixed;left:50%;transform:translateX(-50%);bottom:16px;min-width:320px;max-width:92vw;
+      padding:12px 14px;border-radius:12px;border:1px solid var(--stroke);background:#0b0f1a;color:var(--ink);font-size:18px;display:none}
+    .hint{color:var(--muted);font-size:13px;text-align:center;margin-top:6px}
+  </style>
+</head>
+<body>
+<header>
+  <div class="title">
+    <div>🇪🇸</div>
+    <h1>Charlie lär sig spanska</h1>
+  </div>
+  <div class="stats">
+    <span class="pill">XP: <strong id="xp">0</strong></span>
+    <span class="pill">Streak: <strong id="streak">0</strong> dagar</span>
+  </div>
+</header>
+
+<main>
+  <div class="toolbar">
+    <select id="packSel" title="Välj ordpaket">
+      <option value="weak">🔁 Repetera svaga ord</option>
+      <option value="bas1">Hälsningar & klassrummet</option>
+      <option value="bas2">Familj & personer</option>
+      <option value="mat">Mat & dryck</option>
+      <option value="siffror">Siffror 0–20</option>
+      <option value="farger">Färger</option>
+      <option value="klader">Kläder</option>
+      <option value="djur">Djur</option>
+      <option value="vader">Väder</option>
+      <option value="veckodagar">Veckodagar</option>
+      <option value="manader">Månader</option>
+      <option value="hemmet">Hemmet</option>
+      <option value="kroppen">Kroppen</option>
+      <option value="fraser">Vanliga fraser</option>
+    </select>
+    <button class="primary" data-mode="flash">🃏 Flashcards</button>
+    <button data-mode="quiz">🎯 Quiz</button>
+    <button data-mode="listen">🗣️ Lyssna→klicka</button>
+    <button data-mode="type">⌨️ Skriv</button>
+    <button id="speakBtn">🔊 Spela upp</button>
+    <span class="badges" id="badges"></span>
+  </div>
+
+  <canvas id="stage" width="820" height="520"></canvas>
+  <input id="ghostInput" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Skriv på spanska… (Enter)">
+
+  <div class="hint">Tips: Välj “🔁 Repetera svaga ord” för fokuserad träning. Lägg denna sida på hemskärmen i Safari: Dela → ”Lägg till på hemskärmen”.</div>
+</main>
+
+<script>
+(() => {
+  const cvs = document.getElementById('stage');
+  const ctx = cvs.getContext('2d');
+  const ghost = document.getElementById('ghostInput');
+  const speakBtn = document.getElementById('speakBtn');
+  const packSel = document.getElementById('packSel');
+  const xpEl = document.getElementById('xp');
+  const streakEl = document.getElementById('streak');
+  const badgesEl = document.getElementById('badges');
+
+  // --------- Data (sv → es) ----------
+  const packs = {
+    bas1: [
+      {sv:"hej", es:"hola"}, {sv:"hejdå", es:"adiós"}, {sv:"god morgon", es:"buenos días"},
+      {sv:"tack", es:"gracias"}, {sv:"snälla/varsågod", es:"por favor"}, {sv:"ursäkta", es:"perdón"},
+      {sv:"ja", es:"sí"}, {sv:"nej", es:"no"}, {sv:"klassrum", es:"clase"},
+      {sv:"penna", es:"bolígrafo"}, {sv:"bok", es:"libro"}, {sv:"lärare", es:"profesor / profesora"},
+      {sv:"elev", es:"estudiante"}, {sv:"skola", es:"escuela"}, {sv:"ryggsäck", es:"mochila"}
+    ],
+    bas2: [
+      {sv:"mamma", es:"madre"}, {sv:"pappa", es:"padre"}, {sv:"dotter", es:"hija"}, {sv:"son", es:"hijo"},
+      {sv:"familj", es:"familia"}, {sv:"vän", es:"amigo / amiga"}, {sv:"pojke", es:"niño"}, {sv:"flicka", es:"niña"},
+      {sv:"man", es:"hombre"}, {sv:"kvinna", es:"mujer"}, {sv:"namn", es:"nombre"}, {sv:"jag heter…", es:"me llamo…"}
+    ],
+    mat: [
+      {sv:"äpple", es:"manzana"}, {sv:"bröd", es:"pan"}, {sv:"ost", es:"queso"}, {sv:"vatten", es:"agua"},
+      {sv:"mjölk", es:"leche"}, {sv:"kaffe", es:"café"}, {sv:"te", es:"té"}, {sv:"juice", es:"zumo / jugo"},
+      {sv:"frukost", es:"desayuno"}, {sv:"lunch", es:"almuerzo / comida"}, {sv:"middag", es:"cena"},
+      {sv:"restaurang", es:"restaurante"}
+    ],
+    siffror: [
+      {sv:"noll", es:"cero"}, {sv:"ett", es:"uno"}, {sv:"två", es:"dos"}, {sv:"tre", es:"tres"}, {sv:"fyra", es:"cuatro"},
+      {sv:"fem", es:"cinco"}, {sv:"sex", es:"seis"}, {sv:"sju", es:"siete"}, {sv:"åtta", es:"ocho"}, {sv:"nio", es:"nueve"},
+      {sv:"tio", es:"diez"}, {sv:"elva", es:"once"}, {sv:"tolv", es:"doce"}, {sv:"tretton", es:"trece"},
+      {sv:"fjorton", es:"catorce"}, {sv:"femton", es:"quince"}, {sv:"sexton", es:"dieciséis"},
+      {sv:"sjutton", es:"diecisiete"}, {sv:"arton", es:"dieciocho"}, {sv:"nitton", es:"diecinueve"}, {sv:"tjugo", es:"veinte"}
+    ],
+    farger: [
+      {sv:"röd", es:"rojo"}, {sv:"blå", es:"azul"}, {sv:"grön", es:"verde"}, {sv:"gul", es:"amarillo"},
+      {sv:"svart", es:"negro"}, {sv:"vit", es:"blanco"}, {sv:"orange", es:"naranja"}, {sv:"lila", es:"morado / violeta"},
+      {sv:"rosa", es:"rosa"}, {sv:"brun", es:"marrón / café"}, {sv:"grå", es:"gris"}
+    ],
+    klader: [
+      {sv:"tröja", es:"suéter / jersey"}, {sv:"byxor", es:"pantalones"}, {sv:"jacka", es:"chaqueta"},
+      {sv:"skor", es:"zapatos"}, {sv:"skjorta", es:"camisa"}, {sv:"klänning", es:"vestido"},
+      {sv:"strumpor", es:"calcetines"}, {sv:"hatt/keps", es:"gorro / gorra"}, {sv:"kappa", es:"abrigo"},
+      {sv:"jeans", es:"vaqueros"}
+    ],
+    djur: [
+      {sv:"hund", es:"perro"}, {sv:"katt", es:"gato"}, {sv:"fågel", es:"pájaro"}, {sv:"häst", es:"caballo"},
+      {sv:"fisk", es:"pez"}, {sv:"kanin", es:"conejo"}, {sv:"ko", es:"vaca"}, {sv:"gris", es:"cerdo"},
+      {sv:"får", es:"oveja"}
+    ],
+    vader: [
+      {sv:"sol", es:"sol"}, {sv:"regn", es:"lluvia"}, {sv:"snö", es:"nieve"}, {sv:"vind", es:"viento"},
+      {sv:"moln", es:"nube"}, {sv:"varmt", es:"calor"}, {sv:"kallt", es:"frío"}, {sv:"väder", es:"tiempo (meteorológico)"},
+      {sv:"väderprognos", es:"pronóstico"}
+    ],
+    veckodagar: [
+      {sv:"måndag", es:"lunes"}, {sv:"tisdag", es:"martes"}, {sv:"onsdag", es:"miércoles"},
+      {sv:"torsdag", es:"jueves"}, {sv:"fredag", es:"viernes"}, {sv:"lördag", es:"sábado"}, {sv:"söndag", es:"domingo"}
+    ],
+    manader: [
+      {sv:"januari", es:"enero"}, {sv:"februari", es:"febrero"}, {sv:"mars", es:"marzo"}, {sv:"april", es:"abril"},
+      {sv:"maj", es:"mayo"}, {sv:"juni", es:"junio"}, {sv:"juli", es:"julio"}, {sv:"augusti", es:"agosto"},
+      {sv:"september", es:"septiembre"}, {sv:"oktober", es:"octubre"}, {sv:"november", es:"noviembre"}, {sv:"december", es:"diciembre"}
+    ],
+    hemmet: [
+      {sv:"hus", es:"casa"}, {sv:"rum", es:"habitación / cuarto"}, {sv:"kök", es:"cocina"},
+      {sv:"badrum", es:"baño"}, {sv:"sovrum", es:"dormitorio"}, {sv:"stol", es:"silla"}, {sv:"bord", es:"mesa"},
+      {sv:"säng", es:"cama"}, {sv:"dörr", es:"puerta"}, {sv:"fönster", es:"ventana"}
+    ],
+    kroppen: [
+      {sv:"huvud", es:"cabeza"}, {sv:"hand", es:"mano"}, {sv:"arm", es:"brazo"}, {sv:"ben", es:"pierna"},
+      {sv:"fot", es:"pie"}, {sv:"mage", es:"estómago"}, {sv:"rygg", es:"espalda"}, {sv:"ögon", es:"ojos"},
+      {sv:"öra", es:"oreja"}, {sv:"mun", es:"boca"}, {sv:"näsa", es:"nariz"}
+    ],
+    fraser: [
+      {sv:"hur mår du?", es:"¿cómo estás?"}, {sv:"jag mår bra", es:"estoy bien"}, {sv:"vad heter du?", es:"¿cómo te llamas?"},
+      {sv:"jag heter…", es:"me llamo…"}, {sv:"var kommer du ifrån?", es:"¿de dónde eres?"}, {sv:"jag är från Sverige", es:"soy de Suecia"},
+      {sv:"kan du hjälpa mig?", es:"¿puedes ayudarme?"}, {sv:"jag förstår inte", es:"no entiendo"}, {sv:"jag gillar…", es:"me gusta…"},
+      {sv:"jag vill ha…", es:"quiero…"}, {sv:"hur mycket kostar det?", es:"¿cuánto cuesta?"}, {sv:"var ligger toaletten?", es:"¿dónde está el baño?"}
+    ]
+  };
+
+  // ---------- Progress (localStorage) ----------
+  const store = {
+    load(){ try { return JSON.parse(localStorage.getItem('charlie_es_progress')||'{}'); } catch { return {}; } },
+    save(d){ localStorage.setItem('charlie_es_progress', JSON.stringify(d)); }
+  };
+  let progress = Object.assign({xp:0,streak:0,lastDay:null,mastery:{}}, store.load());
+  function addXP(n){ progress.xp=(progress.xp||0)+n; xpEl.textContent=progress.xp; awardBadges(); store.save(progress); }
+  function touchStreak(){
+    const today = new Date().toISOString().slice(0,10);
+    if (progress.lastDay !== today){
+      const prev = progress.lastDay;
+      const y = new Date(today); const x = prev? new Date(prev): null;
+      const delta = x ? Math.round((y - x)/86400000) : null;
+      if (delta === 1 || prev===null) progress.streak = (progress.streak||0) + 1;
+      else progress.streak = 1;
+      progress.lastDay = today; store.save(progress);
+    }
+    streakEl.textContent = progress.streak||0;
+  }
+  function markMastery(key, ok){
+    const m = progress.mastery[key] || {strength:0, seen:0};
+    m.seen++; if(ok) m.strength = Math.min(5, m.strength+1); else m.strength = Math.max(0, m.strength-1);
+    progress.mastery[key] = m; store.save(progress);
+  }
+  function getStrength(key){ return (progress.mastery[key]?.strength ?? 0); }
+  function awardBadges(){
+    const xp = progress.xp||0; const list=[];
+    if (xp>=50) list.push('🥉 Rookie 50 XP');
+    if (xp>=150) list.push('🥈 Learner 150 XP');
+    if (xp>=300) list.push('🥇 Pro 300 XP');
+    badgesEl.innerHTML = list.map(b=>`<span class="badge">${b}</span>`).join('');
+  }
+  xpEl.textContent = progress.xp||0; streakEl.textContent = progress.streak||0; awardBadges(); touchStreak();
+
+  // ------------- Game State ---------------
+  let mode = 'flash'; // 'quiz' | 'listen' | 'type'
+  let items = buildItems();
+  let idx = 0; shuffle(items);
+
+  // ------------- UI bindings ---------------
+  document.querySelectorAll('button[data-mode]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      mode = btn.dataset.mode;
+      idx = 0; items = buildItems(); shuffle(items);
+      ghost.style.display = (mode==='type')? 'block':'none';
+      draw(); if (mode==='listen' || mode==='type') speakES(currentES());
+    });
+  });
+  packSel.addEventListener('change', ()=>{ idx=0; items = buildItems(); shuffle(items); draw(); });
+  speakBtn.addEventListener('click', ()=> speakES(currentES()));
+  ghost.addEventListener('keydown', (e)=>{ if (e.key==='Enter'){ checkTyped(); } });
+
+  cvs.addEventListener('click', (e)=>{
+    const {left,top} = cvs.getBoundingClientRect(); const x = e.clientX - left, y = e.clientY - top;
+    if (mode==='flash'){
+      if (hitRect(x,y,110,140,600,210)){ showingES = !showingES; draw(); }
+      if (hitRect(x,y,620,380,150,50)){ next(true); }
+      if (hitRect(x,y,50,380,150,50)){ next(false); }
+    } else if (mode==='quiz' || mode==='listen'){
+      for (let i=0;i<4;i++){
+        const ox = 110, oy = 170 + i*72, ow=600, oh=58;
+        if (hitRect(x,y,ox,oy,ow,oh)){ const ok = i===correctIndex; respond(ok); }
+      }
+    }
+  });
+
+  // ------------ Drawing helpers --------------
+  let showingES = false; let options = []; let correctIndex = 0;
+
+  function draw(){
+    ctx.clearRect(0,0,cvs.width,cvs.height);
+    roundRect(20,20,780,480,18,'var(--surface)','var(--stroke)');
+    text(40,60, `Paket: ${packLabel()}  •  Övning: ${labelMode(mode)}`, 18,'var(--muted)');
+    drawDots();
+    if (mode==='flash'){ drawFlash(); }
+    else if (mode==='quiz'){ drawQuiz(false); }
+    else if (mode==='listen'){ drawQuiz(true); }
+    else if (mode==='type'){ drawTypeCard(); }
+    if (packSel.value==='weak' && items.length===0){
+      text(410,300, 'Inga svaga ord just nu – bra jobbat! 🎉', 22,'var(--ok)','center');
+    }
+  }
+  function packLabel(){ const opt = packSel.options[packSel.selectedIndex]; return opt ? opt.text : ''; }
+  function labelMode(m){ return m==='flash' ? 'Flashcards (sv ⇄ es)' : m==='quiz' ? 'Quiz (sv → es)' : m==='listen' ? 'Lyssna→klicka (es → sv)' : 'Skriv vad du hör (es)'; }
+  function drawDots(){ const total=Math.max(1,items.length), shown=Math.min(20,total), startX=40, y=90, gap=22;
+    for(let i=0;i<shown;i++){ const fill = i<(idx%shown) ? 'var(--accent)' : '#2d3442'; circle(startX+i*gap,y,6,fill);} }
+  function isWeak(it){ const key = currentKey(it); return getStrength(key) <= 2; }
+  function displayText(str,it){ return (isWeak(it) ? '🔴 ' : '') + str; }
+
+  function drawFlash(){
+    const it = items[idx]; roundRect(110,140,600,210,20,'var(--card)','var(--stroke)');
+    if (!it){ text(410,240,'–',28,'var(--ink)','center'); return; }
+    const es=it.es, sv=it.sv;
+    text(410,210, showingES? displayText(es,it) : displayText(sv,it), 38,'var(--ink)', 'center');
+    text(410,255, showingES? '← Svenska?' : '← Spanska?', 18,'var(--muted)','center');
+    button(50,380,150,50,'🔄 Vänd'); button(620,380,150,50,'➡️ Nästa');
+  }
+  function drawQuiz(reverse){
+    const it = items[idx]; if (!it) return;
+    roundRect(110,110,600,70,16,'var(--card)','var(--stroke)');
+    const q = reverse ? it.es : it.sv; const target = reverse ? it.sv : it.es;
+    text(410,150, reverse? `Lyssna/läs: ${displayText(q,it)}` : `Översätt: ${displayText(q,it)}`, 22,'var(--ink)','center');
+    const pool = items.length ? items : [].concat(...Object.values(packs));
+    const others = pool.filter(p=> (reverse? p.sv : p.es) !== target); shuffle(others);
+    options = [target, (reverse? others[0]?.sv : others[0]?.es), (reverse? others[1]?.sv : others[1]?.es), (reverse? others[2]?.sv : others[2]?.es)].filter(Boolean);
+    while (options.length<4){ const any = (reverse? others[0]?.sv : others[0]?.es) || target; options.push(any); }
+    shuffle(options); correctIndex = options.indexOf(target);
+    for(let i=0;i<4;i++){ roundRect(110,170 + i*72, 600,58,12,'var(--surface)','var(--stroke)');
+      const optItem = findItemByText(options[i], reverse);
+      text(120,206 + i*72, displayText(options[i], optItem||it), 20,'var(--ink)','left'); }
+    if (reverse){ text(410,470,'Tips: Tryck 🔊 för uttal.',14,'var(--muted)','center'); }
+  }
+  function drawTypeCard(){
+    const it = items[idx]; roundRect(110,130,600,80,16,'var(--card)','var(--stroke)');
+    text(410,170, `Skriv på spanska: “${displayText(it?.sv||'—',it)}”`, 22,'var(--ink)','center');
+    roundRect(110,240,600,70,12,'var(--surface)','var(--stroke)');
+    text(410,280, 'Skriv i rutan nedan och tryck Enter', 16,'var(--muted)','center');
+  }
+
+  function button(x,y,w,h,label){ roundRect(x,y,w,h,12,'var(--surface)','var(--stroke)'); text(x+w/2,y+h/2+6,label,18,'var(--ink)','center'); }
+
+  // ------------- Logic helpers ---------------
+  function currentES(){ return items[idx]?.es || ''; }
+  function currentKey(it){ const pack = packSel.value; return (pack==='weak'?'*':pack)+':'+(it?.es||''); }
+
+  function next(correct){
+    if (items[idx]){ const key = currentKey(items[idx]); markMastery(key, !!correct); if (correct) addXP(10); }
+    idx = (idx + 1) % Math.max(1, items.length); showingES = false; draw();
+    if (mode==='listen' || mode==='type') speakES(currentES());
+  }
+  function respond(ok){ feedback(ok); next(ok); }
+  function checkTyped(){ const val=normalize((ghost.value||'').trim().toLowerCase()); const ans=normalize(currentES().toLowerCase());
+    const ok = val===ans; ghost.value=''; feedback(ok, currentES()); next(ok); }
+  function feedback(ok, ans){
+    ctx.save(); ctx.globalAlpha=.92; ctx.fillStyle = ok? 'rgba(32,192,107,.95)' : 'rgba(255,74,74,.95)';
+    roundRect(190,210,440,100,16, ctx.fillStyle, ctx.fillStyle); ctx.globalAlpha=1;
+    text(410,258, ok? 'Rätt! 🎉 +10 XP' : 'Inte riktigt', 26,'#fff','center');
+    if (!ok && ans) text(410,292, 'Rätt svar: '+ans, 18,'#fff','center'); ctx.restore();
+  }
+
+  // ------------- Speech (TTS) ------------------
+  function speakES(text){
+    if (!('speechSynthesis' in window)) return;
+    const u = new SpeechSynthesisUtterance((text||'').replace(' / ',' '));
+    u.lang = 'es-ES'; u.rate = 0.95;
+    const pick = speechSynthesis.getVoices().find(v=>/^es(-|_)?/.test(v.lang) || /Spanish/.test(v.name));
+    if (pick) u.voice = pick;
+    speechSynthesis.cancel(); speechSynthesis.speak(u);
+  }
+  window.speechSynthesis && (window.speechSynthesis.onvoiceschanged = () => {});
+
+  // ------------- Build/Filter items ------------------
+  function buildItems(){
+    const sel = packSel.value; const all = Object.values(packs).flat();
+    if (sel==='weak'){
+      const weakOnes = all.filter(it => getStrength('*:'+it.es) <= 2 || Object.keys(packs).some(p => getStrength(p+':'+it.es) <= 2));
+      return uniqueByES(weakOnes);
+    }
+    return packs[sel].slice();
+  }
+
+  function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; const t=a[i]; a[i]=a[j]; a[j]=t; } return a; }
+  function text(x,y,str,size=18,fill='var(--ink)',align='left'){ ctx.font=`600 ${size}px ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial`; ctx.fillStyle=fill; ctx.textAlign=align; ctx.fillText(str,x,y); }
+  function circle(x,y,r,fill){ ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fillStyle=fill; ctx.fill(); }
+  function roundRect(x,y,w,h,r,fill,stroke){
+    ctx.beginPath();
+    ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r);
+    if (fill){ ctx.fillStyle = getVar(fill) || fill; ctx.fill(); }
+    if (stroke){ ctx.strokeStyle = getVar(stroke) || stroke; ctx.stroke(); }
+  }
+  function getVar(val){ if (!val) return null; const m=/^var\((--[a-z-]+)\)$/.exec(val); if(!m) return null; return getComputedStyle(document.documentElement).getPropertyValue(m[1]).trim(); }
+  function hitRect(px,py,x,y,w,h){ return px>=x && px<=x+w && py>=y && py<=y+h; }
+  function normalize(s){ return s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim(); }
+  function uniqueByES(arr){ const seen=new Set(); const out=[]; for (const it of arr){ if(!seen.has(it.es)){ seen.add(it.es); out.push(it);} } return out; }
+  function findItemByText(txt, reverse){ const all = Object.values(packs).flat(); return reverse ? all.find(it => it.sv===txt) : all.find(it => it.es===txt); }
+
+  // --- first paint ---
+  draw();
+  if ('ontouchstart' in window){ ghost.style.bottom = '16px'; } // iPhone-friendly
+  window._state = {packs,progress};
+})();
+</script>
+</body>
+</html>
